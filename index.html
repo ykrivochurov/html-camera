@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>PWA Camera Demo (iPhone)</title>
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PWA Camera" />
+  <link rel="apple-touch-icon" href="data:image/png;base64,iVBOR..." />
+  <link rel="icon" sizes="192x192" href="data:image/png;base64,iVBOR..." />
+  <link rel="icon" sizes="512x512" href="data:image/png;base64,iVBOR..." />
+  <style>
+    :root { --ink:#0f172a; --muted:#64748b; --bg:#f8fafc; --accent:#3b82f6 }
+    html,body{height:100%} body{margin:0;font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+    header{position:sticky;top:0;z-index:10;background:rgba(248,250,252,.9);backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid #e2e8f0}
+    .wrap{max-width:920px;margin:0 auto;padding:16px}
+    h1{margin:0;font-weight:700}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px;margin-top:16px}
+    @media(min-width:900px){.grid{grid-template-columns:1.25fr .75fr}}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 1px 2px rgba(2,8,23,.06)}
+    .card .hd{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #e2e8f0}
+    .card .bd{padding:16px}
+    .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    button,select,input[type="checkbox"]{font:inherit}
+    button{cursor:pointer;border:1px solid #cbd5e1;background:#fff;border-radius:12px;padding:10px 14px}
+    button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .pill{display:inline-block;border:1px dashed #cbd5e1;border-radius:999px;padding:4px 10px;color:var(--muted)}
+    video{width:100%;border-radius:12px;background:#000}
+    canvas{max-width:100%;border:1px dashed #e2e8f0;border-radius:12px}
+    .note{color:var(--muted);font-size:14px}
+    .ok{color:#16a34a}.warn{color:#b45309}
+    footer{padding:24px 16px;color:var(--muted);text-align:center}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+    .chip{padding:4px 8px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a}
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>📷 PWA Camera Demo — iPhone</h1>
+    <div class="note">Установите как PWA (Добавить на экран «Домой»), затем проверьте доступ к камере, фото и видео.</div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="grid">
+    <section class="card">
+      <div class="hd">
+        <strong>1) Превью с камеры (getUserMedia)</strong>
+        <span id="permStatus" class="pill">Статус: неизвестно</span>
+      </div>
+      <div class="bd">
+        <div class="row" style="margin-bottom:8px">
+          <button id="btnStart" class="primary">▶️ Запустить камеру</button>
+          <button id="btnStop" disabled>⏹ Остановить</button>
+          <button id="btnSwitch" disabled>🔁 Переключить фронт/тыл</button>
+          <label class="row" style="gap:6px"><input type="checkbox" id="cbTorch"/> Фонарик</label>
+          <span id="modeChip" class="chip">environment</span>
+        </div>
+        <div class="row" style="margin-bottom:8px">
+          <label>Качество:
+            <select id="selRes">
+              <option value="3840x2160">4K (3840×2160)</option>
+              <option value="1920x1080" selected>1080p (1920×1080)</option>
+              <option value="1280x720">720p (1280×720)</option>
+              <option value="0x0">Авто</option>
+            </select>
+          </label>
+          <label>FPS:
+            <select id="selFps">
+              <option value="60">60</option>
+              <option value="30" selected>30</option>
+              <option value="0">Авто</option>
+            </select>
+          </label>
+          <label class="row" style="gap:6px;align-items:center">Зум:
+            <input id="rangeZoom" type="range" min="1" max="5" step="0.1" value="1" disabled style="width:200px"/>
+            <span id="zoomVal" class="pill">1.0×</span>
+          </label>
+        </div>
+        <video id="video" playsinline autoplay muted></video>
+        <div class="note">Если чёрный экран — нажмите «Запустить» ещё раз (iOS требует жест).</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="hd">
+        <strong>2) Снимок фото</strong>
+        <span class="pill">Canvas + download</span>
+      </div>
+      <div class="bd">
+        <div class="row" style="margin-bottom:8px">
+          <button id="btnShot" disabled>📸 Снять кадр</button>
+          <a id="linkPhoto" download="photo.jpg" style="display:none"><button>⬇️ Скачать фото</button></a>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label class="row" style="gap:6px">JPEG качество
+            <input id="rangeJpeg" type="range" min="0.5" max="1" step="0.01" value="0.92" style="width:160px"/>
+            <span id="jpegVal" class="pill">0.92</span>
+          </label>
+        </div>
+        <canvas id="canvas" width="0" height="0"></canvas>
+        <div class="note">Снимок рендерится в &lt;canvas&gt;, затем сохраняется как JPEG.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="hd">
+        <strong>3) Запись видео</strong>
+        <span id="recSupport" class="pill">Проверка поддержки…</span>
+      </div>
+      <div class="bd">
+        <div class="row" style="margin-bottom:8px">
+          <button id="btnRec" disabled>⏺ Начать запись</button>
+          <button id="btnRecStop" disabled>⏹ Остановить запись</button>
+          <a id="linkVideo" download="video.webm" style="display:none"><button>⬇️ Скачать видео</button></a>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <label class="row" style="gap:6px">Битрейт видео (кбит/с)
+            <input id="videoBitrate" type="number" min="500" max="50000" step="500" value="8000" style="width:110px"/>
+          </label>
+        </div>
+        <div class="note">MediaRecorder в iOS 14.3+; параметр битрейта может игнорироваться системой.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="hd">
+        <strong>4) Fallback через &lt;input type="file" capture&gt;</strong>
+        <span class="pill">Надёжный обходной путь</span>
+      </div>
+      <div class="bd">
+        <input id="fileCam" type="file" accept="image/*;capture=camera,video/*" />
+        <div id="pickedInfo" class="note" style="margin-top:8px"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="hd"><strong>PWA статус</strong><span class="pill">Манифест + SW</span></div>
+      <div class="bd mono" id="pwaStatus">…</div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  Сделано как один HTML-файл. Сервис-воркер и манифест регистрируются динамически. Работает по HTTPS или локально.
+</footer>
+
+<script>
+(async function(){
+  const $ = (s)=>document.querySelector(s);
+  const video = $('#video');
+  const canvas = $('#canvas');
+  const ctx = canvas.getContext('2d');
+  const btnStart = $('#btnStart');
+  const btnStop = $('#btnStop');
+  const btnSwitch = $('#btnSwitch');
+  const btnShot = $('#btnShot');
+  const linkPhoto = $('#linkPhoto');
+  const permStatus = $('#permStatus');
+  const modeChip = $('#modeChip');
+  const cbTorch = $('#cbTorch');
+  const fileCam = $('#fileCam');
+  const pickedInfo = $('#pickedInfo');
+  const selRes = $('#selRes');
+  const selFps = $('#selFps');
+  const rangeZoom = $('#rangeZoom');
+  const zoomVal = $('#zoomVal');
+  const rangeJpeg = $('#rangeJpeg');
+  const jpegVal = $('#jpegVal');
+
+  const btnRec = $('#btnRec');
+  const btnRecStop = $('#btnRecStop');
+  const linkVideo = $('#linkVideo');
+  const recSupport = $('#recSupport');
+  const videoBitrate = $('#videoBitrate');
+
+  let currentFacing = 'environment';
+  let stream = null;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+
+  function setPermStatus(t, cls){ permStatus.textContent = 'Статус: '+t; permStatus.className = 'pill ' + (cls||''); }
+  function supportsMediaRecorder(){ return typeof MediaRecorder !== 'undefined'; }
+  recSupport.textContent = supportsMediaRecorder()? 'MediaRecorder: OK' : 'MediaRecorder: нет поддержки';
+  (supportsMediaRecorder()? recSupport.classList.add('ok') : recSupport.classList.add('warn'));
+
+  async function getPermissionState(){
+    try{
+      if(!navigator.permissions) return null;
+      const s = await navigator.permissions.query({ name: 'camera' });
+      return s.state;
+    }catch{ return null; }
+  }
+  async function updatePermLabel(){
+    const state = await getPermissionState();
+    if(!state) setPermStatus('неизвестно (Safari)', '');
+    else if(state==='granted') setPermStatus('разрешено', 'ok');
+    else if(state==='denied') setPermStatus('запрещено', 'warn');
+    else setPermStatus('спросит при запуске', '');
+  }
+
+  async function startCamera(){
+    try{
+      stopCamera();
+      const [w,h] = (selRes?.value || '0x0').split('x').map(Number);
+      const fpsSel = Number(selFps?.value || 0);
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: currentFacing,
+          width: w ? { ideal: w } : undefined,
+          height: h ? { ideal: h } : undefined,
+          frameRate: fpsSel ? { ideal: fpsSel } : { ideal: 30 }
+        }
+      };
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+
+      await setupTorch();
+      await setupZoom();
+
+      btnStop.disabled = false;
+      btnSwitch.disabled = false;
+      btnShot.disabled = false;
+      btnRec.disabled = !supportsMediaRecorder();
+    }catch(err){
+      console.error(err);
+      alert('Ошибка доступа к камере: ' + err.message);
+    }
+  }
+
+  async function setupTorch(){
+    try{
+      const [track] = stream.getVideoTracks();
+      const imageCapture = new ImageCapture(track);
+      const caps = await imageCapture.getPhotoCapabilities();
+      if('torch' in caps){
+        cbTorch.disabled = false;
+        cbTorch.onchange = async ()=>{
+          try{ await track.applyConstraints({ advanced: [{ torch: cbTorch.checked }] }); }catch(e){ console.warn('Torch error', e); }
+        };
+      } else { cbTorch.disabled = true; }
+    }catch(e){ cbTorch.disabled = true; }
+  }
+
+  async function setupZoom(){
+    try{
+      if(!stream){ rangeZoom.disabled = true; return; }
+      const [track] = stream.getVideoTracks();
+      const caps = track.getCapabilities?.();
+      const settings = track.getSettings?.() || {};
+      if(caps && 'zoom' in caps){
+        rangeZoom.min = caps.zoom.min ?? 1;
+        rangeZoom.max = caps.zoom.max ?? 5;
+        rangeZoom.step = caps.zoom.step ?? 0.1;
+        rangeZoom.value = settings.zoom ?? 1;
+        zoomVal.textContent = Number(rangeZoom.value).toFixed(1) + '×';
+        rangeZoom.disabled = false;
+        rangeZoom.oninput = async ()=>{
+          const v = Number(rangeZoom.value);
+          zoomVal.textContent = v.toFixed(1) + '×';
+          try{ await track.applyConstraints({ advanced: [{ zoom: v }] }); }catch(e){ console.warn('zoom applyConstraints error', e); }
+        };
+      } else {
+        rangeZoom.disabled = true;
+        zoomVal.textContent = 'нет';
+      }
+    }catch(e){ rangeZoom.disabled = true; zoomVal.textContent='нет'; }
+  }
+
+  function stopCamera(){
+    try{ if(stream){ stream.getTracks().forEach(t=>t.stop()); } }catch{}
+    stream = null;
+    video.srcObject = null;
+    btnStop.disabled = true;
+    btnSwitch.disabled = true;
+    btnShot.disabled = true;
+    btnRec.disabled = true;
+    btnRecStop.disabled = true;
+    cbTorch.checked = false; cbTorch.disabled = true;
+    rangeZoom.disabled = true; zoomVal.textContent = '—';
+  }
+
+  async function switchFacing(){
+    currentFacing = (currentFacing === 'environment') ? 'user' : 'environment';
+    modeChip.textContent = currentFacing;
+    await startCamera();
+  }
+
+  function takePhoto(){
+    if(!stream) return;
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    const w = settings.width || 1280;
+    const h = settings.height || 720;
+    canvas.width = w; canvas.height = h;
+    ctx.drawImage(video, 0, 0, w, h);
+    const q = Number(rangeJpeg?.value || 0.92);
+    jpegVal.textContent = q.toFixed(2);
+    canvas.toBlob((blob)=>{
+      if(!blob) return;
+      const url = URL.createObjectURL(blob);
+      linkPhoto.href = url;
+      linkPhoto.style.display = 'inline-block';
+    }, 'image/jpeg', q);
+  }
+
+  function startRec(){
+    if(!supportsMediaRecorder() || !stream) return;
+    recordedChunks = [];
+    let mr;
+    try{
+      mr = new MediaRecorder(stream, {
+        mimeType: 'video/webm;codecs=vp9',
+        videoBitsPerSecond: Math.max(500000, Math.min(50000000, Number(videoBitrate?.value)*1000 || 8000000))
+      });
+    }catch(e){
+      try{
+        mr = new MediaRecorder(stream, {
+          mimeType: 'video/mp4',
+          videoBitsPerSecond: Math.max(500000, Math.min(50000000, Number(videoBitrate?.value)*1000 || 8000000))
+        });
+      }catch{
+        mr = new MediaRecorder(stream);
+      }
+    }
+    mediaRecorder = mr;
+    mediaRecorder.ondataavailable = (e)=>{ if(e.data && e.data.size) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = ()=>{
+      const blob = new Blob(recordedChunks, { type: recordedChunks[0]?.type || 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      linkVideo.href = url;
+      linkVideo.style.display = 'inline-block';
+    };
+    mediaRecorder.start();
+    btnRec.disabled = true;
+    btnRecStop.disabled = false;
+  }
+
+  function stopRec(){
+    if(mediaRecorder && mediaRecorder.state !== 'inactive'){ mediaRecorder.stop(); }
+    btnRec.disabled = false;
+    btnRecStop.disabled = true;
+  }
+
+  fileCam.addEventListener('change', ()=>{
+    const f = fileCam.files && fileCam.files[0];
+    pickedInfo.textContent = f ? `Выбрано: ${f.name} (${Math.round(f.size/1024)} KB, ${f.type||'mime?'})` : '';
+  });
+
+  btnStart.addEventListener('click', startCamera);
+  btnStop.addEventListener('click', stopCamera);
+  btnSwitch.addEventListener('click', switchFacing);
+  btnShot.addEventListener('click', takePhoto);
+  btnRec.addEventListener('click', startRec);
+  btnRecStop.addEventListener('click', stopRec);
+  selRes.addEventListener('change', startCamera);
+  selFps.addEventListener('change', startCamera);
+  rangeJpeg.addEventListener('input', ()=>{ jpegVal.textContent = Number(rangeJpeg.value).toFixed(2); });
+
+  await updatePermLabel();
+
+  // ====== PWA bits (manifest + service worker) ======
+  const pwaStatusEl = document.getElementById('pwaStatus');
+  function logPWA(msg){ pwaStatusEl.textContent += `\n${msg}`; }
+  pwaStatusEl.textContent = '';
+
+  const manifest = {
+    name: 'PWA Camera Demo',
+    short_name: 'CameraDemo',
+    start_url: '.',
+    display: 'standalone',
+    background_color: '#ffffff',
+    theme_color: '#3b82f6',
+    icons: [
+      { src: document.querySelector('link[rel="icon"][sizes="192x192"]').href, sizes: '192x192', type: 'image/png' },
+      { src: document.querySelector('link[rel="icon"][sizes="512x512"]').href, sizes: '512x512', type: 'image/png' }
+    ]
+  };
+  const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const manifestURL = URL.createObjectURL(manifestBlob);
+  const link = document.createElement('link');
+  link.rel = 'manifest'; link.href = manifestURL; document.head.appendChild(link);
+  logPWA('Манифест создан и подключён.');
+
+  const swCode = `
+    self.addEventListener('install', (e)=>{
+      e.waitUntil((async()=>{
+        const cache = await caches.open('pwa-camera-v1');
+        await cache.addAll(['./']);
+      })());
+      self.skipWaiting();
+    });
+    self.addEventListener('activate', (e)=>{ e.waitUntil(self.clients.claim()); });
+    self.addEventListener('fetch', (e)=>{
+      const url = new URL(e.request.url);
+      if(url.origin === location.origin){
+        e.respondWith((async()=>{
+          const cache = await caches.open('pwa-camera-v1');
+          const cached = await cache.match(e.request);
+          if(cached) return cached;
+          try{
+            const res = await fetch(e.request);
+            if(e.request.method === 'GET' && res.status === 200){ cache.put(e.request, res.clone()); }
+            return res;
+          }catch(err){ return cached || Response.error(); }
+        })());
+      }
+    });
+  `;
+  if('serviceWorker' in navigator){
+    const swBlob = new Blob([swCode], { type: 'text/javascript' });
+    const swUrl = URL.createObjectURL(swBlob);
+    try{ await navigator.serviceWorker.register(swUrl); logPWA('Service Worker зарегистрирован.'); }
+    catch(err){ logPWA('SW ошибка: '+err.message); }
+  } else { logPWA('Service Worker не поддерживается.'); }
+
+  const isInStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  logPWA('Режим: ' + (isInStandalone ? 'Standalone (A2HS)' : 'Browser tab'));
+  if(!isInStandalone){ logPWA('Подсказка: на iPhone нажмите «Поделиться» → «На экран Домой».'); }
+})();
+</script>
+</body>
+</html>
